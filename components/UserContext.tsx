@@ -1,4 +1,3 @@
-// components/UserContext.tsx
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -24,54 +23,41 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = async () => {
     try {
-      // Get wallet from localStorage (set by wallet adapter)
-      const storedWallet = localStorage.getItem('walletAddress');
-      
+      const storedWallet = typeof window !== 'undefined'
+        ? localStorage.getItem('walletAddress')
+        : null;
+
       if (storedWallet) {
         setWalletAddress(storedWallet);
-        
-        // Fetch role from Supabase
-        const { data, error } = await supabase
+        const response = await supabase
           .from('users')
           .select('role')
           .eq('wallet_address', storedWallet)
           .maybeSingle();
-        
-        if (error) throw error;
-        if (data?.role) {
-          setRole(data.role as Role);
-        }
+
+        const data = response.data as { role: Role } | null;
+        if (data?.role) setRole(data.role);
       }
     } catch (error) {
-      console.error('Failed to fetch user:', error);
+      console.error('UserContext error:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ Runs EXACTLY ONCE. No 'loading' in dependencies to prevent infinite loops.
   useEffect(() => {
     refreshUser();
   }, []);
 
-  // ✅ Listen for wallet changes
-  useEffect(() => {
-    const handleWalletChange = (event: StorageEvent) => {
-      if (event.key === 'walletAddress') {
-        refreshUser();
-      }
-    };
-    window.addEventListener('storage', handleWalletChange);
-    return () => window.removeEventListener('storage', handleWalletChange);
-  }, []);
-
   return (
-    <UserContext.Provider value={{ 
-      role, 
-      walletAddress, 
-      loading, 
-      setRole, 
+    <UserContext.Provider value={{
+      role,
+      walletAddress,
+      loading,
+      setRole,
       setWalletAddress,
-      refreshUser 
+      refreshUser
     }}>
       {children}
     </UserContext.Provider>
