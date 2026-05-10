@@ -5,6 +5,8 @@
 [build.environment]
   NPM_FLAGS = "--legacy-peer-deps"
   NODE_VERSION = "20"
+  # Explicitly disable pnpm detection
+  PNPM_VERSION = "0"
 
 # Next.js plugin for App Router support
 [[plugins]]
