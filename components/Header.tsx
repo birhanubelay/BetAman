@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
@@ -47,10 +48,20 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[#2d2d2d] bg-[#0f0f0f]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0f0f0f]/60">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-        {/* Logo */}
+        {/* Logo - Updated to use image from /images folder */}
         <Link href="/" className="flex items-center gap-3 group">
           <div className="relative w-10 h-10 overflow-hidden rounded-lg bg-gradient-to-br from-[#d4af37] to-[#b8962e] flex items-center justify-center">
-            <span className="text-black font-bold text-lg">B</span>
+            <Image 
+              src="/images/logos.png" 
+              alt="BetAman Logo" 
+              width={50} 
+              height={50}
+              className="object-cover"
+              onError={(e) => {
+                // Fallback to text if image doesn't exist
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-white text-lg leading-tight group-hover:text-[#d4af37] transition">BetAman</span>

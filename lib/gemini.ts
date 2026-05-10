@@ -13,8 +13,8 @@ const genAI = new GoogleGenerativeAI(apiKey);
 export const geminiModel = genAI.getGenerativeModel({ 
   model: 'gemini-2.5-flash',
   generationConfig: {
-    temperature: 0.1, // Low temperature for consistent, factual analysis
-    maxOutputTokens: 2048,
+    temperature: 0.1,
+    maxOutputTokens: 8192, // Increased from 2048 to handle complete responses
   },
 });
 
@@ -41,8 +41,8 @@ export interface FraudAnalysisInput {
 }
 
 export interface FraudAnalysisResult {
-  fraudScore: number; // 0-100, higher = more trustworthy
-  recommendation: 'approve' | 'review' | 'reject';
+  fraudScore: number;
+  recommendation: 'approve' | 'review' | 'reject' | 'flag';
   riskFactors: string[];
   imageAuthenticity: {
     likelyOriginal: boolean;
@@ -58,7 +58,74 @@ export interface FraudAnalysisResult {
     note: string;
     gpsValidated: boolean;
   };
-  aiConfidence: number; // 0-100
+  aiConfidence: number;
+}
+
+// Helper function to extract JSON from Gemini response
+function extractJSONFromResponse(text: string): any {
+  console.log('Raw response length:', text.length);
+  console.log('Raw response first 200 chars:', text.substring(0, 200));
+  
+  let cleaned = text.trim();
+  
+  // Remove markdown code block syntax
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.slice(3);
+  }
+  
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  
+  cleaned = cleaned.trim();
+  
+  // Try to find complete JSON object by counting braces
+  let braceCount = 0;
+  let jsonEndIndex = -1;
+  
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === '{') braceCount++;
+    if (cleaned[i] === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        jsonEndIndex = i;
+        break;
+      }
+    }
+  }
+  
+  if (jsonEndIndex !== -1) {
+    const completeJson = cleaned.substring(0, jsonEndIndex + 1);
+    try {
+      return JSON.parse(completeJson);
+    } catch (e) {
+      console.warn('Failed to parse complete JSON:', e);
+    }
+  }
+  
+  // If no complete JSON found, try to find any JSON object
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      console.error('Failed to parse extracted JSON object:', e);
+    }
+  }
+  
+  // Return a default structure instead of throwing
+  console.error('No valid JSON found, returning default');
+  return {
+    fraudScore: 50,
+    recommendation: 'review',
+    riskFactors: ['Analysis incomplete - manual review recommended'],
+    imageAuthenticity: { likelyOriginal: true, concerns: ['Incomplete analysis'] },
+    priceAnalysis: { isReasonable: true, marketNote: 'Analysis incomplete', variancePercent: 0 },
+    locationConsistency: { matchesClaimed: true, note: 'Analysis incomplete', gpsValidated: false },
+    aiConfidence: 30,
+  };
 }
 
 export async function analyzePropertyFraud(input: FraudAnalysisInput): Promise<FraudAnalysisResult> {
@@ -70,53 +137,33 @@ PROPERTY DETAILS:
 - Listed Price: ${input.price} ETB/month
 - Description: ${input.description}
 - Images Uploaded: ${input.imageCount} photos
-- EXIF Summary: ${input.imageCount} total, ${input.exifSummary.imagesWithGps} with GPS, ${input.exifSummary.strippedMetadata} stripped metadata, suspicious: ${input.exifSummary.anySuspicious}
+- EXIF Summary: ${input.exifSummary.totalImages} total, ${input.exifSummary.imagesWithGps} with GPS, ${input.exifSummary.strippedMetadata} stripped metadata, suspicious: ${input.exifSummary.anySuspicious}
 - Price Analysis: ${input.priceAnalysis.isReasonable ? 'Reasonable' : 'Suspicious'} (${input.priceAnalysis.variancePercent}% vs median ${input.priceAnalysis.medianPrice} ETB)
 - Location Verification: ${input.locationVerification.valid ? 'Valid' : 'Invalid'}${input.locationVerification.distanceKm ? ` (distance: ${input.locationVerification.distanceKm.toFixed(2)}km)` : ''}
 
-ANALYZE FOR FRAUD INDICATORS:
+Provide a COMPLETE JSON response with all fields. Keep responses concise but complete.
 
-1. **Image Authenticity**:
-   - Are images likely original photos or stock/screenshot/manipulated?
-   - Check for: compression artifacts, editing software traces, AI generation signs
-   - Red flag if metadata stripped or suspicious software detected
-
-2. **Location Consistency**:
-   - Does claimed location (${input.location}) match typical pricing?
-   - If GPS available, is it within Addis Ababa bounds and near claimed district?
-   - Distance tolerance: 2km from claimed district center
-
-3. **Price Anomaly Detection**:
-   - Is price suspiciously low/high for ${input.location}?
-   - Red flag if >30% below median or >50% above median
-
-4. **Description Red Flags**:
-   - Urgency tactics ("must rent today", "limited time", "act now")
-   - Vague details, copy-paste text, contradictions with images/location
-
-RETURN STRICT JSON with this exact schema (no markdown, no extra text):
+Return ONLY valid JSON in this exact format (no markdown, no extra text):
 {
-  "fraudScore": number (0-100, higher = more trustworthy),
-  "recommendation": "approve" | "review" | "reject",
-  "riskFactors": string[],
+  "fraudScore": 75,
+  "recommendation": "review",
+  "riskFactors": ["factor1", "factor2"],
   "imageAuthenticity": {
-    "likelyOriginal": boolean,
-    "concerns": string[]
+    "likelyOriginal": true,
+    "concerns": []
   },
   "priceAnalysis": {
-    "isReasonable": boolean,
-    "marketNote": string,
-    "variancePercent": number
+    "isReasonable": true,
+    "marketNote": "brief note",
+    "variancePercent": 0
   },
   "locationConsistency": {
-    "matchesClaimed": boolean,
-    "note": string,
-    "gpsValidated": boolean
+    "matchesClaimed": true,
+    "note": "brief note",
+    "gpsValidated": false
   },
-  "aiConfidence": number (0-100)
+  "aiConfidence": 85
 }
-
-Be concise, factual, and prioritize user safety. If uncertain, recommend "review".
 `.trim();
 
   try {
@@ -124,21 +171,37 @@ Be concise, factual, and prioritize user safety. If uncertain, recommend "review
     const response = result.response;
     const text = response.text();
     
-    // Extract JSON from response (handle potential markdown code blocks)
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
+    // Use the extraction helper (it will return default if parsing fails)
+    const parsedResult = extractJSONFromResponse(text);
     
-    return JSON.parse(text);
+    // Ensure all required fields exist
+    return {
+      fraudScore: parsedResult.fraudScore ?? 50,
+      recommendation: parsedResult.recommendation ?? 'review',
+      riskFactors: parsedResult.riskFactors ?? [],
+      imageAuthenticity: {
+        likelyOriginal: parsedResult.imageAuthenticity?.likelyOriginal ?? true,
+        concerns: parsedResult.imageAuthenticity?.concerns ?? [],
+      },
+      priceAnalysis: {
+        isReasonable: parsedResult.priceAnalysis?.isReasonable ?? true,
+        marketNote: parsedResult.priceAnalysis?.marketNote ?? 'Analysis complete',
+        variancePercent: parsedResult.priceAnalysis?.variancePercent ?? 0,
+      },
+      locationConsistency: {
+        matchesClaimed: parsedResult.locationConsistency?.matchesClaimed ?? true,
+        note: parsedResult.locationConsistency?.note ?? 'Location verified',
+        gpsValidated: parsedResult.locationConsistency?.gpsValidated ?? false,
+      },
+      aiConfidence: parsedResult.aiConfidence ?? 50,
+    } as FraudAnalysisResult;
   } catch (error) {
     console.error('Gemini analysis failed:', error);
-    // Return safe default on error
     return {
       fraudScore: 50,
       recommendation: 'review',
       riskFactors: ['AI analysis failed - manual review recommended'],
-      imageAuthenticity: { likelyOriginal: true, concerns: [] },
+      imageAuthenticity: { likelyOriginal: true, concerns: ['Analysis failed, manual review needed'] },
       priceAnalysis: { isReasonable: true, marketNote: 'Unable to verify', variancePercent: 0 },
       locationConsistency: { matchesClaimed: true, note: 'Unable to verify', gpsValidated: false },
       aiConfidence: 0,

@@ -7,7 +7,7 @@ import Header from '@/components/Header';
 import ReputationBadge from '@/components/ReputationBadge';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Award, Star, Shield, Loader2, AlertCircle } from 'lucide-react';
+import { Award, Star, Shield, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
@@ -28,6 +28,7 @@ export default function ReputationPage() {
   const [reputations, setReputations] = useState<Reputation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [usingMockData, setUsingMockData] = useState(false);
 
   useEffect(() => {
     // Only fetch if wallet is connected
@@ -38,6 +39,18 @@ export default function ReputationPage() {
 
     const fetchReputation = async () => {
       try {
+        // First try to get from localStorage (mock data for demo)
+        const mockReputations = localStorage.getItem(`mock_reputation_${publicKey.toString()}`);
+        
+        if (mockReputations) {
+          const parsed = JSON.parse(mockReputations);
+          setReputations(parsed);
+          setUsingMockData(true);
+          setLoading(false);
+          return;
+        }
+        
+        // If no mock data, try Supabase
         const { data, error } = await supabase
           .from('reputation_nfts')
           .select('*')
@@ -45,11 +58,53 @@ export default function ReputationPage() {
           .order('created_at', { ascending: false });
         
         if (error) throw error;
-        // ✅ Filter out any null/undefined items
-        setReputations((data || []).filter((r): r is Reputation => r !== null && r.created_at !== undefined));
+        
+        // Filter out any null/undefined items
+        const validData = (data || []).filter((r): r is Reputation => r !== null && r.created_at !== undefined);
+        setReputations(validData);
+        
+        // If no data in Supabase, create demo data
+        if (validData.length === 0) {
+          const demoReputation: Reputation = {
+            id: `demo_${Date.now()}`,
+            wallet_address: publicKey.toString(),
+            role: 'tenant',
+            count: 1,
+            metadata: {
+              earned_at: new Date().toISOString(),
+              transaction_type: 'demo_escrow',
+              demo: true
+            },
+            created_at: new Date().toISOString()
+          };
+          
+          // Save to localStorage for demo
+          localStorage.setItem(`mock_reputation_${publicKey.toString()}`, JSON.stringify([demoReputation]));
+          setReputations([demoReputation]);
+          setUsingMockData(true);
+        }
       } catch (err: any) {
         console.error('Failed to fetch reputation:', err);
         setError(err.message || 'Failed to load reputation');
+        
+        // Create fallback mock data on error
+        if (publicKey) {
+          const fallbackReputation: Reputation = {
+            id: `fallback_${Date.now()}`,
+            wallet_address: publicKey.toString(),
+            role: 'tenant',
+            count: 1,
+            metadata: {
+              earned_at: new Date().toISOString(),
+              transaction_type: 'demo_escrow',
+              demo: true,
+              fallback: true
+            },
+            created_at: new Date().toISOString()
+          };
+          setReputations([fallbackReputation]);
+          setUsingMockData(true);
+        }
       } finally {
         setLoading(false);
       }
@@ -58,7 +113,7 @@ export default function ReputationPage() {
     fetchReputation();
   }, [connected, publicKey]);
 
-  // ✅ Show connect prompt if wallet not connected
+  // Show connect prompt if wallet not connected
   if (!connected) {
     return (
       <>
@@ -83,7 +138,7 @@ export default function ReputationPage() {
     );
   }
 
-  // ✅ Show loading state
+  // Show loading state
   if (loading) {
     return (
       <>
@@ -98,7 +153,7 @@ export default function ReputationPage() {
     );
   }
 
-  // ✅ Safe aggregation with null checks
+  // Safe aggregation with null checks
   const tenantCount = reputations.filter(r => r?.role === 'tenant').reduce((sum, r) => sum + (r?.count || 0), 0);
   const landlordCount = reputations.filter(r => r?.role === 'landlord').reduce((sum, r) => sum + (r?.count || 0), 0);
   const brokerCount = reputations.filter(r => r?.role === 'broker').reduce((sum, r) => sum + (r?.count || 0), 0);
@@ -114,6 +169,12 @@ export default function ReputationPage() {
             </Link>
             <h1 className="text-4xl font-bold text-white mb-2">Your Reputation</h1>
             <p className="text-gray-400">Verified transactions and earned badges</p>
+            {usingMockData && (
+              <div className="mt-2 inline-flex items-center gap-1 bg-[#d4af37]/10 text-[#d4af37] text-xs px-2 py-1 rounded-full">
+                <Sparkles className="w-3 h-3" />
+                Demo Mode
+              </div>
+            )}
           </div>
 
           <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-6 mb-8">
@@ -144,8 +205,8 @@ export default function ReputationPage() {
           <h2 className="text-2xl font-bold text-white mb-6">Earned Badges</h2>
           
           {error && (
-            <Card className="bg-red-500/10 border-red-500/30 p-4 mb-6">
-              <p className="text-sm text-red-200">{error}</p>
+            <Card className="bg-yellow-500/10 border-yellow-500/30 p-4 mb-6">
+              <p className="text-sm text-yellow-200">{error} (Using demo data)</p>
             </Card>
           )}
           
@@ -153,7 +214,7 @@ export default function ReputationPage() {
             <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-8 text-center">
               <p className="text-gray-400 mb-4">No reputation badges yet.</p>
               <p className="text-sm text-gray-500 mb-6">
-                Complete verified transactions to earn soulbound reputation NFTs.
+                Complete a demo escrow transaction to earn your first reputation badge!
               </p>
               <Link href="/">
                 <Button className="bg-[#d4af37] hover:bg-[#c59b2b] text-black">
@@ -164,30 +225,29 @@ export default function ReputationPage() {
           ) : (
             <div className="space-y-4">
               {reputations.map((rep) => (
-                // ✅ Safe render with null check
                 rep?.id && <ReputationBadge key={rep.id} reputation={rep} size="lg" />
               ))}
             </div>
           )}
 
           <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-6 mt-10">
-            <h3 className="font-bold text-white mb-4">How to Earn Reputation</h3>
+            <h3 className="font-bold text-white mb-4">How to Earn Reputation (Demo)</h3>
             <ol className="space-y-3 text-sm text-gray-300">
               <li className="flex gap-3">
                 <span className="text-[#d4af37] font-bold">1.</span>
-                <span>Complete a secure escrow transaction as a tenant</span>
+                <span>Click "Initiate Secure Escrow" on any property</span>
               </li>
               <li className="flex gap-3">
                 <span className="text-[#d4af37] font-bold">2.</span>
-                <span>Successfully list and rent a property as a landlord</span>
+                <span>Click "Confirm Viewing & Release Funds"</span>
               </li>
               <li className="flex gap-3">
                 <span className="text-[#d4af37] font-bold">3.</span>
-                <span>Facilitate verified deals as a broker</span>
+                <span>Your reputation badge will appear instantly! ✨</span>
               </li>
             </ol>
             <p className="text-xs text-gray-500 mt-4">
-              Reputation NFTs are soulbound (non-transferable) and permanently linked to your wallet.
+              Demo mode: Reputation is stored locally for demonstration purposes.
             </p>
           </Card>
         </div>
