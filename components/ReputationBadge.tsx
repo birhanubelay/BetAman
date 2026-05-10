@@ -1,14 +1,15 @@
-
+// components/ReputationBadge.tsx
 'use client';
 
 import { Award, Star, Shield, Calendar } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+
 interface Reputation {
   id: string;
   wallet_address: string;
   role: 'tenant' | 'landlord' | 'broker';
   count: number;
-  metadata: any;
+  metadata?: any;
   created_at: string;
 }
 
@@ -18,6 +19,11 @@ interface ReputationBadgeProps {
 }
 
 export default function ReputationBadge({ reputation, size = 'md' }: ReputationBadgeProps) {
+  // ✅ Guard against undefined reputation
+  if (!reputation?.id || !reputation?.created_at) {
+    return null;
+  }
+
   const icons = {
     tenant: <Star className="w-5 h-5" />,
     landlord: <Shield className="w-5 h-5" />,
@@ -42,11 +48,17 @@ export default function ReputationBadge({ reputation, size = 'md' }: ReputationB
     lg: 'text-base px-4 py-3'
   };
 
-  const date = new Date(reputation.created_at).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
+  // ✅ Safe date parsing
+  let date = 'Unknown';
+  try {
+    date = new Date(reputation.created_at).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  } catch {
+    // Fallback if date is invalid
+  }
 
   return (
     <Card className={`bg-[#1a1a1a] border-[#2d2d2d] ${sizeClasses[size]} flex items-center gap-4`}>
@@ -60,7 +72,7 @@ export default function ReputationBadge({ reputation, size = 'md' }: ReputationB
             {labels[reputation.role]}
           </span>
           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${colors[reputation.role]}`}>
-            x{reputation.count}
+            x{reputation.count || 0}
           </span>
         </div>
         <div className="flex items-center gap-2 text-gray-400">
@@ -69,6 +81,7 @@ export default function ReputationBadge({ reputation, size = 'md' }: ReputationB
         </div>
       </div>
       
+      {/* ✅ Safe metadata access */}
       {reputation.metadata?.transaction && (
         <span className="text-xs text-gray-500 hidden md:block">
           {reputation.metadata.transaction}

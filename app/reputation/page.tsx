@@ -1,80 +1,197 @@
-// components/ReputationBadge.tsx
+// app/reputation/page.tsx
 'use client';
 
-import { Award, Star, Shield, Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
+import Header from '@/components/Header';
+import ReputationBadge from '@/components/ReputationBadge';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Award, Star, Shield, Loader2, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+
+// ✅ Force dynamic rendering (no static generation at build time)
+export const dynamic = 'force-dynamic';
 
 interface Reputation {
   id: string;
   wallet_address: string;
   role: 'tenant' | 'landlord' | 'broker';
   count: number;
-  metadata: any;
+  metadata?: any;
   created_at: string;
 }
 
-interface ReputationBadgeProps {
-  reputation: Reputation;
-  size?: 'sm' | 'md' | 'lg';
-}
+export default function ReputationPage() {
+  const { publicKey, connected } = useWallet();
+  const [reputations, setReputations] = useState<Reputation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-export default function ReputationBadge({ reputation, size = 'md' }: ReputationBadgeProps) {
-  const icons = {
-    tenant: <Star className="w-5 h-5" />,
-    landlord: <Shield className="w-5 h-5" />,
-    broker: <Award className="w-5 h-5" />
-  };
+  useEffect(() => {
+    // Only fetch if wallet is connected
+    if (!connected || !publicKey) {
+      setLoading(false);
+      return;
+    }
 
-  const colors = {
-    tenant: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
-    landlord: 'text-green-400 bg-green-500/10 border-green-500/30',
-    broker: 'text-[#d4af37] bg-[#d4af37]/10 border-[#d4af37]/30'
-  };
+    const fetchReputation = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('reputation_nfts')
+          .select('*')
+          .eq('wallet_address', publicKey.toString())
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        // ✅ Filter out any null/undefined items
+        setReputations((data || []).filter((r): r is Reputation => r !== null && r.created_at !== undefined));
+      } catch (err: any) {
+        console.error('Failed to fetch reputation:', err);
+        setError(err.message || 'Failed to load reputation');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const labels = {
-    tenant: 'Verified Rental',
-    landlord: 'Verified Listing',
-    broker: 'Verified Deal'
-  };
+    fetchReputation();
+  }, [connected, publicKey]);
 
-  const sizeClasses = {
-    sm: 'text-xs px-2 py-1',
-    md: 'text-sm px-3 py-2',
-    lg: 'text-base px-4 py-3'
-  };
+  // ✅ Show connect prompt if wallet not connected
+  if (!connected) {
+    return (
+      <>
+        <Header />
+        <main className="min-h-screen pt-12 pb-20">
+          <div className="max-w-3xl mx-auto px-6 text-center">
+            <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-8">
+              <AlertCircle className="w-12 h-12 text-[#d4af37] mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-white mb-2">Connect Wallet</h2>
+              <p className="text-gray-400 mb-6">
+                Connect your Solana wallet to view your reputation and earned badges.
+              </p>
+              <Link href="/">
+                <Button className="bg-[#d4af37] hover:bg-[#c59b2b] text-black">
+                  Back to Home
+                </Button>
+              </Link>
+            </Card>
+          </div>
+        </main>
+      </>
+    );
+  }
 
-  const date = new Date(reputation.created_at).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
+  // ✅ Show loading state
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <main className="min-h-screen pt-12 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-[#d4af37] mx-auto mb-4" />
+            <p className="text-gray-400">Loading your reputation...</p>
+          </div>
+        </main>
+      </>
+    );
+  }
+
+  // ✅ Safe aggregation with null checks
+  const tenantCount = reputations.filter(r => r?.role === 'tenant').reduce((sum, r) => sum + (r?.count || 0), 0);
+  const landlordCount = reputations.filter(r => r?.role === 'landlord').reduce((sum, r) => sum + (r?.count || 0), 0);
+  const brokerCount = reputations.filter(r => r?.role === 'broker').reduce((sum, r) => sum + (r?.count || 0), 0);
 
   return (
-    <Card className={`bg-[#1a1a1a] border-[#2d2d2d] ${sizeClasses[size]} flex items-center gap-4`}>
-      <div className={`p-3 rounded-lg ${colors[reputation.role]} flex items-center justify-center`}>
-        {icons[reputation.role]}
-      </div>
-      
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-bold text-white capitalize">
-            {labels[reputation.role]}
-          </span>
-          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${colors[reputation.role]}`}>
-            x{reputation.count}
-          </span>
+    <>
+      <Header />
+      <main className="min-h-screen pt-12 pb-20">
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="mb-10">
+            <Link href="/" className="text-[#d4af37] hover:text-[#c59b2b] text-sm font-semibold mb-4 inline-block">
+              ← Back
+            </Link>
+            <h1 className="text-4xl font-bold text-white mb-2">Your Reputation</h1>
+            <p className="text-gray-400">Verified transactions and earned badges</p>
+          </div>
+
+          <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-6 mb-8">
+            <p className="text-xs text-gray-400 font-semibold mb-2">CONNECTED WALLET</p>
+            <p className="font-mono text-sm text-white break-all">
+              {publicKey?.toString() || 'Not connected'}
+            </p>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-6 text-center">
+              <Star className="w-8 h-8 text-[#d4af37] mx-auto mb-3" />
+              <p className="text-3xl font-bold text-white">{tenantCount}</p>
+              <p className="text-sm text-gray-400">Verified Rentals</p>
+            </Card>
+            <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-6 text-center">
+              <Shield className="w-8 h-8 text-[#d4af37] mx-auto mb-3" />
+              <p className="text-3xl font-bold text-white">{landlordCount}</p>
+              <p className="text-sm text-gray-400">Verified Listings</p>
+            </Card>
+            <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-6 text-center">
+              <Award className="w-8 h-8 text-[#d4af37] mx-auto mb-3" />
+              <p className="text-3xl font-bold text-white">{brokerCount}</p>
+              <p className="text-sm text-gray-400">Verified Deals</p>
+            </Card>
+          </div>
+
+          <h2 className="text-2xl font-bold text-white mb-6">Earned Badges</h2>
+          
+          {error && (
+            <Card className="bg-red-500/10 border-red-500/30 p-4 mb-6">
+              <p className="text-sm text-red-200">{error}</p>
+            </Card>
+          )}
+          
+          {reputations.length === 0 ? (
+            <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-8 text-center">
+              <p className="text-gray-400 mb-4">No reputation badges yet.</p>
+              <p className="text-sm text-gray-500 mb-6">
+                Complete verified transactions to earn soulbound reputation NFTs.
+              </p>
+              <Link href="/">
+                <Button className="bg-[#d4af37] hover:bg-[#c59b2b] text-black">
+                  Browse Properties
+                </Button>
+              </Link>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {reputations.map((rep) => (
+                // ✅ Safe render with null check
+                rep?.id && <ReputationBadge key={rep.id} reputation={rep} size="lg" />
+              ))}
+            </div>
+          )}
+
+          <Card className="bg-[#1a1a1a] border-[#2d2d2d] p-6 mt-10">
+            <h3 className="font-bold text-white mb-4">How to Earn Reputation</h3>
+            <ol className="space-y-3 text-sm text-gray-300">
+              <li className="flex gap-3">
+                <span className="text-[#d4af37] font-bold">1.</span>
+                <span>Complete a secure escrow transaction as a tenant</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-[#d4af37] font-bold">2.</span>
+                <span>Successfully list and rent a property as a landlord</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-[#d4af37] font-bold">3.</span>
+                <span>Facilitate verified deals as a broker</span>
+              </li>
+            </ol>
+            <p className="text-xs text-gray-500 mt-4">
+              Reputation NFTs are soulbound (non-transferable) and permanently linked to your wallet.
+            </p>
+          </Card>
         </div>
-        <div className="flex items-center gap-2 text-gray-400">
-          <Calendar className="w-3 h-3" />
-          <span className="text-xs">Earned {date}</span>
-        </div>
-      </div>
-      
-      {reputation.metadata?.transaction && (
-        <span className="text-xs text-gray-500 hidden md:block">
-          {reputation.metadata.transaction}
-        </span>
-      )}
-    </Card>
+      </main>
+    </>
   );
 }
