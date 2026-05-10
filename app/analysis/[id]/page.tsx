@@ -1,4 +1,4 @@
-// app/analysis/[id]/page.tsx
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -244,18 +244,6 @@ export default function AnalysisPage({ params }: { params: Promise<{ id: string 
                 confidence={analysisData.checks.description_match.confidence}
                 details={analysisData.checks.description_match.details}
               />
-            </div>
-          </div>
-
-          {/* Images */}
-          <div className="mb-10">
-            <h2 className="text-2xl font-bold text-white mb-6">Property Images</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {analysisData.images.map((img: string, idx: number) => (
-                <Card key={idx} className="bg-[#1a1a1a] border-[#2d2d2d] overflow-hidden">
-                  <img src={img} alt={`Property ${idx + 1}`} className="w-full h-48 object-cover" />
-                </Card>
-              ))}
             </div>
           </div>
 

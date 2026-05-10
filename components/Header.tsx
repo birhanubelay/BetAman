@@ -1,74 +1,163 @@
+// components/Header.tsx
 'use client';
 
-import Image from 'next/image';
-import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { Globe } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useUser } from '@/components/UserContext';
+import { Globe, Menu, X, LogOut, Wallet } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function Header() {
-  const [language, setLanguage] = useState<'en' | 'am'>('en');
+  const pathname = usePathname();
+  const { publicKey, disconnect, connecting, connected } = useWallet();
+  const { setVisible } = useWalletModal();
+  const { role, setRole } = useUser();
+  
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  // ✅ Wait for React mount
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const translations = {
-    en: { title: 'BetAman', subtitle: 'Home Trust', menu: 'Dashboard' },
-    am: { title: 'ብዓታማን', subtitle: 'የመነጩ ምንዑ', menu: 'ማሞታ' }
+  const handleDisconnect = async () => {
+    await disconnect();
+    setRole(null);
+    localStorage.removeItem('walletAddress');
+    window.location.href = '/';
   };
 
-  const t = translations[language];
+  const handleConnectClick = () => {
+    setVisible(true);
+  };
+
+  const navLinks = role === 'tenant' 
+    ? [{ href: '/', label: 'Browse' }, { href: '/reputation', label: 'My Reputation' }]
+    : [{ href: '/submit', label: 'Submit Property' }, { href: '/reputation', label: 'My Reputation' }];
+
+  // Format wallet address for display
+  const formatAddress = (address: string) => {
+    return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  };
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0f0f0f]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0f0f0f]/60 border-b border-[#2d2d2d]">
+    <header className="sticky top-0 z-40 w-full border-b border-[#2d2d2d] bg-[#0f0f0f]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0f0f0f]/60">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="relative w-10 h-10 overflow-hidden rounded-lg bg-gradient-to-br from-[#d4af37] to-[#a98630]">
-            <Image
-              src="/images/logo.jpg"
-              alt="BetAman"
-              width={40}
-              height={40}
-              className="w-full h-full object-cover"
-            />
+          <div className="relative w-10 h-10 overflow-hidden rounded-lg bg-gradient-to-br from-[#d4af37] to-[#b8962e] flex items-center justify-center">
+            <span className="text-black font-bold text-lg">B</span>
           </div>
-          <div className="flex flex-col gap-0">
-            <h1 className="font-bold text-lg text-white tracking-tight">{t.title}</h1>
-            <p className="text-xs text-[#d4af37] font-semibold">{t.subtitle}</p>
+          <div className="flex flex-col">
+            <span className="font-bold text-white text-lg leading-tight group-hover:text-[#d4af37] transition">BetAman</span>
+            <span className="text-[10px] text-gray-400 -mt-0.5">Fraud Detection</span>
           </div>
         </Link>
 
-        {/* Center Navigation */}
+        {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-8">
-          <Link href="/" className="text-sm text-gray-400 hover:text-white transition">
-            {t.menu}
-          </Link>
-          <Link href="/submit" className="text-sm text-gray-400 hover:text-white transition">
-            Submit Listing
-          </Link>
-          <Link href="/reputation" className="text-sm text-gray-400 hover:text-white transition">
-            Reputation
-          </Link>
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`text-sm font-medium transition ${
+                pathname === link.href 
+                  ? 'text-[#d4af37]' 
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
         </nav>
 
-        {/* Right Controls */}
+        {/* Right Side: Wallet + Lang + Mobile Toggle */}
         <div className="flex items-center gap-4">
           {/* Language Toggle */}
-          <button
-            onClick={() => setLanguage(language === 'en' ? 'am' : 'en')}
-            className="p-2 rounded-lg hover:bg-[#2d2d2d] transition text-gray-400 hover:text-white"
-            title="Toggle language"
-          >
-            <Globe className="w-5 h-5" />
-          </button>
+          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white h-9 w-9 p-0">
+            <Globe className="w-4 h-4" />
+          </Button>
 
-          {/* Wallet Connection */}
-          {mounted && <WalletMultiButton />}
+          {/* ✅ Custom Wallet Button - No WalletMultiButton dependency */}
+          {mounted && (
+            <>
+              {connected && publicKey ? (
+                <div className="flex items-center gap-2">
+                  <div className="bg-[#1a1a1a] border border-[#2d2d2d] rounded-md px-3 py-1.5 text-sm text-white">
+                    <span className="text-[#d4af37]">◎</span> {formatAddress(publicKey.toString())}
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleDisconnect}
+                    className="text-gray-400 hover:text-red-400 h-9 px-3"
+                    title="Disconnect wallet"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  onClick={handleConnectClick}
+                  disabled={connecting}
+                  className="bg-[#1a1a1a] border border-[#2d2d2d] text-white hover:bg-[#2d2d2d] font-medium h-9 px-4"
+                >
+                  {connecting ? (
+                    <div className="w-4 h-4 border-2 border-[#d4af37] border-t-transparent rounded-full animate-spin mr-2" />
+                  ) : (
+                    <Wallet className="w-4 h-4 mr-2" />
+                  )}
+                  Connect Wallet
+                </Button>
+              )}
+            </>
+          )}
+
+          {/* Mobile Menu Toggle */}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="md:hidden text-gray-400 hover:text-white h-9 w-9 p-0"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </Button>
         </div>
       </div>
+
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-[#2d2d2d] bg-[#0f0f0f]">
+          <div className="px-6 py-4 space-y-3">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`block text-sm font-medium py-2 ${
+                  pathname === link.href 
+                    ? 'text-[#d4af37]' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
+            {publicKey && (
+              <button
+                onClick={() => { handleDisconnect(); setMobileMenuOpen(false); }}
+                className="block text-sm font-medium py-2 text-red-400 hover:text-red-300"
+              >
+                Disconnect Wallet
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 }
