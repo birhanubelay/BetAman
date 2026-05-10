@@ -1,8 +1,8 @@
+// app/layout.tsx
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
+// ✅ REMOVED: import { Analytics } from '@vercel/analytics/next'
 import WalletProvider from '@/components/WalletProvider'
-// ✅ ADD THESE IMPORTS:
 import { UserProvider } from '@/components/UserContext'
 import RoleSelector from '@/components/RoleSelector'
 import '../styles/globals.css'
@@ -59,7 +59,7 @@ export default function RootLayout({
             <div className="relative z-10">
               {children}
             </div>
-            {process.env.NODE_ENV === 'production' && <Analytics />}
+            {/* ✅ REMOVED: {process.env.NODE_ENV === 'production' && <Analytics />} */}
           </UserProvider>
         </WalletProvider>
         
